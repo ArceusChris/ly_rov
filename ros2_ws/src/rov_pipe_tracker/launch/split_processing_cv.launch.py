@@ -1,27 +1,19 @@
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import ComposableNodeContainer
 from launch_ros.descriptions import ComposableNode
 
 
 def generate_launch_description():
-    device = LaunchConfiguration("device")
-    width = LaunchConfiguration("width")
-    height = LaunchConfiguration("height")
-    fps = LaunchConfiguration("fps")
+    raw_image_topic = LaunchConfiguration("raw_image_topic")
+    image_topic = LaunchConfiguration("image_topic")
     mask_topic = LaunchConfiguration("mask_topic")
-    target_ip = LaunchConfiguration("target_ip")
-    target_port = LaunchConfiguration("target_port")
+    command_topic = LaunchConfiguration("command_topic")
     lateral_sign = LaunchConfiguration("lateral_sign")
     yaw_sign = LaunchConfiguration("yaw_sign")
     desired_angle_deg = LaunchConfiguration("desired_angle_deg")
     forward_axis = LaunchConfiguration("forward_axis")
-    set_manual_mode = LaunchConfiguration("set_manual_mode")
-    auto_arm = LaunchConfiguration("auto_arm")
-    manual_mode = LaunchConfiguration("manual_mode")
-    startup_command_retries = LaunchConfiguration("startup_command_retries")
-    startup_command_interval_s = LaunchConfiguration("startup_command_interval_s")
     manual_control_enabled = LaunchConfiguration("manual_control_enabled")
     web_host = LaunchConfiguration("web_host")
     web_port = LaunchConfiguration("web_port")
@@ -33,26 +25,21 @@ def generate_launch_description():
     tuning_web_port = LaunchConfiguration("tuning_web_port")
     manual_command_topic = LaunchConfiguration("manual_command_topic")
     command_log_topic = LaunchConfiguration("command_log_topic")
-    processed_topic = LaunchConfiguration("processed_topic")
-    processed_stream_url = LaunchConfiguration("processed_stream_url")
+    bridge_node_name = LaunchConfiguration("bridge_node_name")
+    bridge_arm_service = PythonExpression(["'/' + '", bridge_node_name, "' + '/arm'"])
+    bridge_manual_mode_service = PythonExpression(["'/' + '", bridge_node_name, "' + '/manual_mode'"])
+    bridge_manual_control_service = PythonExpression(
+        ["'/' + '", bridge_node_name, "' + '/manual_control_enabled'"])
 
     return LaunchDescription([
-        DeclareLaunchArgument("device", default_value="/dev/video0"),
-        DeclareLaunchArgument("width", default_value="640"),
-        DeclareLaunchArgument("height", default_value="480"),
-        DeclareLaunchArgument("fps", default_value="30"),
+        DeclareLaunchArgument("raw_image_topic", default_value="image_raw"),
+        DeclareLaunchArgument("image_topic", default_value="image_dehazed"),
         DeclareLaunchArgument("mask_topic", default_value="pipe_cv_segmentation"),
-        DeclareLaunchArgument("target_ip", default_value="0.0.0.0"),
-        DeclareLaunchArgument("target_port", default_value="14550"),
+        DeclareLaunchArgument("command_topic", default_value="mavlink_manual_control_command"),
         DeclareLaunchArgument("lateral_sign", default_value="1.0"),
         DeclareLaunchArgument("yaw_sign", default_value="1.0"),
         DeclareLaunchArgument("desired_angle_deg", default_value="90.0"),
         DeclareLaunchArgument("forward_axis", default_value="150"),
-        DeclareLaunchArgument("set_manual_mode", default_value="true"),
-        DeclareLaunchArgument("auto_arm", default_value="false"),
-        DeclareLaunchArgument("manual_mode", default_value="19"),
-        DeclareLaunchArgument("startup_command_retries", default_value="5"),
-        DeclareLaunchArgument("startup_command_interval_s", default_value="0.5"),
         DeclareLaunchArgument("manual_control_enabled", default_value="true"),
         DeclareLaunchArgument("web_host", default_value="0.0.0.0"),
         DeclareLaunchArgument("web_port", default_value="8080"),
@@ -64,8 +51,7 @@ def generate_launch_description():
         DeclareLaunchArgument("tuning_web_port", default_value="8082"),
         DeclareLaunchArgument("manual_command_topic", default_value="manual_control_command"),
         DeclareLaunchArgument("command_log_topic", default_value="pipe_tracker_command_log"),
-        DeclareLaunchArgument("processed_topic", default_value="remote_processed_image"),
-        DeclareLaunchArgument("processed_stream_url", default_value=""),
+        DeclareLaunchArgument("bridge_node_name", default_value="mavlink_manual_control_bridge"),
         DeclareLaunchArgument("min_red", default_value="150"),
         DeclareLaunchArgument("min_green", default_value="150"),
         DeclareLaunchArgument("min_blue", default_value="150"),
@@ -77,30 +63,27 @@ def generate_launch_description():
         DeclareLaunchArgument("max_aspect", default_value="2.0"),
         DeclareLaunchArgument("erode_kernel_size", default_value="1"),
         ComposableNodeContainer(
-            name="pipe_follow_cv_container",
+            name="split_processing_cv_container",
             namespace="",
             package="rclcpp_components",
             executable="component_container",
             composable_node_descriptions=[
                 ComposableNode(
-                    package="camera_driver",
-                    plugin="camera_driver::V4L2CameraNode",
-                    name="v4l2_camera",
+                    package="dehaze",
+                    plugin="dehaze::UDCPDehazeNode",
+                    name="udcp_dehaze",
                     parameters=[{
-                        "device": device,
-                        "width": width,
-                        "height": height,
-                        "fps": fps,
-                        "topic": "image_raw",
+                        "input_topic": raw_image_topic,
+                        "output_topic": image_topic,
                     }],
-                    extra_arguments=[{"use_intra_process_comms": False}],
+                    extra_arguments=[{"use_intra_process_comms": True}],
                 ),
                 ComposableNode(
                     package="rov_pipe_tracker",
                     plugin="rov_pipe_tracker::CvPipeSegmenterNode",
                     name="cv_pipe_segmenter",
                     parameters=[{
-                        "input_topic": "image_raw",
+                        "input_topic": image_topic,
                         "output_topic": mask_topic,
                         "min_red": LaunchConfiguration("min_red"),
                         "min_green": LaunchConfiguration("min_green"),
@@ -123,19 +106,12 @@ def generate_launch_description():
                         "mask_topic": mask_topic,
                         "manual_command_topic": manual_command_topic,
                         "command_log_topic": command_log_topic,
-                        "target_ip": target_ip,
-                        "target_port": target_port,
-                        "udp_bind_port": target_port,
-                        "learn_target_from_udp": True,
+                        "output_command_topic": command_topic,
+                        "mavlink_enabled": False,
                         "lateral_sign": lateral_sign,
                         "yaw_sign": yaw_sign,
                         "desired_angle_deg": desired_angle_deg,
                         "forward_axis": forward_axis,
-                        "set_manual_mode": set_manual_mode,
-                        "auto_arm": auto_arm,
-                        "manual_mode": manual_mode,
-                        "startup_command_retries": startup_command_retries,
-                        "startup_command_interval_s": startup_command_interval_s,
                         "manual_control_enabled": manual_control_enabled,
                     }],
                     extra_arguments=[{"use_intra_process_comms": True}],
@@ -145,18 +121,16 @@ def generate_launch_description():
                     plugin="rov_pipe_tracker::PipeWebUiNode",
                     name="pipe_web_ui",
                     parameters=[{
-                        "raw_topic": "image_raw",
+                        "raw_topic": image_topic,
                         "mask_topic": mask_topic,
-                        "processed_topic": processed_topic,
-                        "processed_stream_url": processed_stream_url,
                         "command_log_topic": command_log_topic,
                         "http_host": web_host,
                         "http_port": web_port,
                         "jpeg_quality": web_jpeg_quality,
                         "stream_fps": web_stream_fps,
-                        "arm_service": "/pipe_tracker/arm",
-                        "manual_mode_service": "/pipe_tracker/manual_mode",
-                        "manual_control_service": "/pipe_tracker/manual_control_enabled",
+                        "arm_service": bridge_arm_service,
+                        "manual_mode_service": bridge_manual_mode_service,
+                        "manual_control_service": bridge_manual_control_service,
                     }],
                     extra_arguments=[{"use_intra_process_comms": True}],
                 ),
@@ -168,9 +142,9 @@ def generate_launch_description():
                         "command_topic": manual_command_topic,
                         "http_host": manual_web_host,
                         "http_port": manual_web_port,
-                        "arm_service": "/pipe_tracker/arm",
-                        "manual_mode_service": "/pipe_tracker/manual_mode",
-                        "manual_control_service": "/pipe_tracker/manual_control_enabled",
+                        "arm_service": bridge_arm_service,
+                        "manual_mode_service": bridge_manual_mode_service,
+                        "manual_control_service": bridge_manual_control_service,
                     }],
                     extra_arguments=[{"use_intra_process_comms": True}],
                 ),

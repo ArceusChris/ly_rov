@@ -10,8 +10,12 @@
 
   <depend>rclcpp</depend>
   <depend>rclcpp_components</depend>
+  <depend>rcl_interfaces</depend>
   <depend>sensor_msgs</depend>
   <depend>ai_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>std_srvs</depend>
+  <exec_depend>rclpy</exec_depend>
 
   <build_depend>opencv</build_depend>
   <exec_depend>opencv</exec_depend>

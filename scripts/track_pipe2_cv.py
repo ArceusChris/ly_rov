@@ -48,20 +48,25 @@ def wrap_half_pi(angle: float) -> float:
 def segment_white_pipe(
     frame: np.ndarray,
     min_area: int,
-    max_sat: int,
-    min_value: int,
-    abs_value: int,
-    local_delta: int,
+    min_red: int,
+    min_green: int,
+    min_blue: int,
+    max_channel_diff: int,
+    max_red_blue_diff: int,
 ) -> np.ndarray:
-    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-    sat = hsv[:, :, 1]
-    value = hsv[:, :, 2]
-    value_i = value.astype(np.int16)
-    local = cv2.blur(value, (51, 51)).astype(np.int16)
+    blue = frame[:, :, 0]
+    green = frame[:, :, 1]
+    red = frame[:, :, 2]
+    channel_diff = np.maximum.reduce([red, green, blue]) - np.minimum.reduce([red, green, blue])
+    red_blue_diff = red.astype(np.int16) - blue.astype(np.int16)
 
-    # ponytail: this is tuned for pipe2.mp4; expose CLI knobs before adding calibration UI.
-    bright = (value_i > local + local_delta) | (value_i > abs_value)
-    mask = ((sat < max_sat) & (value_i > min_value) & bright).astype(np.uint8) * 255
+    mask = (
+        (red > min_red)
+        & (green > min_green)
+        & (blue > min_blue)
+        & (channel_diff <= max_channel_diff)
+        & (red_blue_diff <= max_red_blue_diff)
+    ).astype(np.uint8) * 255
     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, (9, 25)))
     mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_RECT, (5, 9)))
 
@@ -212,10 +217,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-frames", type=int, default=0, help="0 means all frames")
     parser.add_argument("--min-area", type=int, default=1800)
     parser.add_argument("--min-pixels", type=int, default=80)
-    parser.add_argument("--max-sat", type=int, default=95)
-    parser.add_argument("--min-value", type=int, default=55)
-    parser.add_argument("--abs-value", type=int, default=95)
-    parser.add_argument("--local-delta", type=int, default=5)
+    parser.add_argument("--min-red", type=int, default=150)
+    parser.add_argument("--min-green", type=int, default=150)
+    parser.add_argument("--min-blue", type=int, default=150)
+    parser.add_argument("--max-channel-diff", type=int, default=45)
+    parser.add_argument("--max-red-blue-diff", type=int, default=55)
     parser.add_argument("--desired-angle-deg", type=float, default=90.0)
     parser.add_argument("--forward-axis", type=int, default=250)
     parser.add_argument("--z-axis", type=int, default=500)
@@ -260,7 +266,15 @@ def main() -> int:
         if not ok:
             break
 
-        mask = segment_white_pipe(frame, args.min_area, args.max_sat, args.min_value, args.abs_value, args.local_delta)
+        mask = segment_white_pipe(
+            frame,
+            args.min_area,
+            args.min_red,
+            args.min_green,
+            args.min_blue,
+            args.max_channel_diff,
+            args.max_red_blue_diff,
+        )
         obs = observe(mask, args.min_pixels)
         cmd = command_from_observation(args, obs)
         out = draw_overlay(frame, mask, obs, cmd)

@@ -76,6 +76,21 @@ ros2 launch rov_pipe_tracker pipe_follow_container.launch.py \
   target_port:=14550
 ```
 
+OpenCV pipe segmentation with video Web UI and manual-control Web UI:
+
+```bash
+ros2 launch rov_pipe_tracker pipe_follow_cv_container.launch.py \
+  device:=/dev/video0 \
+  target_port:=14550
+```
+
+Default ports:
+
+```text
+8080  video, pipe-mask overlay monitor, and automatic command log
+8081  manual motion control
+```
+
 Pipe tracker only, if segmentation is already running:
 
 ```bash
@@ -131,6 +146,24 @@ When no valid mask is available, it sends neutral control:
 ```text
 x=0 y=0 z=500 r=0
 ```
+
+## Manual Control Web UI
+
+The manual-control UI is available at:
+
+```text
+http://<ROV_IP>:8081
+```
+
+It publishes `manual_control_command` with this layout:
+
+```text
+[x, y, z, r, override_enabled]
+```
+
+`x/y/r` use `-1000..1000`, `z` uses `0..1000`, and `z=500` is neutral.
+When manual override is enabled, manual commands take priority over automatic pipe
+following. Press `RELEASE AUTO` to hand control back to automatic pipe following.
 
 ## Safety
 

@@ -1,7 +1,7 @@
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
-from launch_ros.actions import ComposableNodeContainer
+from launch_ros.actions import ComposableNodeContainer, Node
 from launch_ros.descriptions import ComposableNode
 
 
@@ -11,6 +11,9 @@ def generate_launch_description():
     height = LaunchConfiguration("height")
     fps = LaunchConfiguration("fps")
     mask_topic = LaunchConfiguration("mask_topic")
+    mask_stream_url = LaunchConfiguration("mask_stream_url")
+    overlay_stream_url = LaunchConfiguration("overlay_stream_url")
+    processed_stream_url = LaunchConfiguration("processed_stream_url")
     target_ip = LaunchConfiguration("target_ip")
     target_port = LaunchConfiguration("target_port")
     lateral_sign = LaunchConfiguration("lateral_sign")
@@ -29,19 +32,24 @@ def generate_launch_description():
     web_stream_fps = LaunchConfiguration("web_stream_fps")
     manual_web_host = LaunchConfiguration("manual_web_host")
     manual_web_port = LaunchConfiguration("manual_web_port")
-    tuning_web_host = LaunchConfiguration("tuning_web_host")
-    tuning_web_port = LaunchConfiguration("tuning_web_port")
     manual_command_topic = LaunchConfiguration("manual_command_topic")
     command_log_topic = LaunchConfiguration("command_log_topic")
-    processed_topic = LaunchConfiguration("processed_topic")
-    processed_stream_url = LaunchConfiguration("processed_stream_url")
 
     return LaunchDescription([
         DeclareLaunchArgument("device", default_value="/dev/video0"),
         DeclareLaunchArgument("width", default_value="640"),
         DeclareLaunchArgument("height", default_value="480"),
         DeclareLaunchArgument("fps", default_value="30"),
-        DeclareLaunchArgument("mask_topic", default_value="pipe_cv_segmentation"),
+        DeclareLaunchArgument("mask_topic", default_value="remote_pipe_segmentation"),
+        DeclareLaunchArgument("mask_stream_url", default_value="http://192.168.127.11:8090/mask.mjpg"),
+        DeclareLaunchArgument(
+            "overlay_stream_url",
+            default_value="http://192.168.127.11:8090/processed.mjpg",
+        ),
+        DeclareLaunchArgument(
+            "processed_stream_url",
+            default_value="http://192.168.127.11:8090/mask.mjpg",
+        ),
         DeclareLaunchArgument("target_ip", default_value="0.0.0.0"),
         DeclareLaunchArgument("target_port", default_value="14550"),
         DeclareLaunchArgument("lateral_sign", default_value="1.0"),
@@ -60,24 +68,20 @@ def generate_launch_description():
         DeclareLaunchArgument("web_stream_fps", default_value="15.0"),
         DeclareLaunchArgument("manual_web_host", default_value="0.0.0.0"),
         DeclareLaunchArgument("manual_web_port", default_value="8081"),
-        DeclareLaunchArgument("tuning_web_host", default_value="0.0.0.0"),
-        DeclareLaunchArgument("tuning_web_port", default_value="8082"),
         DeclareLaunchArgument("manual_command_topic", default_value="manual_control_command"),
         DeclareLaunchArgument("command_log_topic", default_value="pipe_tracker_command_log"),
-        DeclareLaunchArgument("processed_topic", default_value="remote_processed_image"),
-        DeclareLaunchArgument("processed_stream_url", default_value=""),
-        DeclareLaunchArgument("min_red", default_value="150"),
-        DeclareLaunchArgument("min_green", default_value="150"),
-        DeclareLaunchArgument("min_blue", default_value="150"),
-        DeclareLaunchArgument("max_channel_diff", default_value="45"),
-        DeclareLaunchArgument("max_red_blue_diff", default_value="55"),
-        DeclareLaunchArgument("min_area", default_value="3000"),
-        DeclareLaunchArgument("min_height_ratio", default_value="0.18"),
-        DeclareLaunchArgument("min_aspect", default_value="0.5"),
-        DeclareLaunchArgument("max_aspect", default_value="2.0"),
-        DeclareLaunchArgument("erode_kernel_size", default_value="1"),
+        Node(
+            package="rov_pipe_tracker",
+            executable="remote_mask_mjpeg_bridge.py",
+            name="remote_mask_mjpeg_bridge",
+            parameters=[{
+                "input_url": mask_stream_url,
+                "output_topic": mask_topic,
+            }],
+            output="screen",
+        ),
         ComposableNodeContainer(
-            name="pipe_follow_cv_container",
+            name="pipe_follow_remote_segmentation_container",
             namespace="",
             package="rclcpp_components",
             executable="component_container",
@@ -94,26 +98,6 @@ def generate_launch_description():
                         "topic": "image_raw",
                     }],
                     extra_arguments=[{"use_intra_process_comms": False}],
-                ),
-                ComposableNode(
-                    package="rov_pipe_tracker",
-                    plugin="rov_pipe_tracker::CvPipeSegmenterNode",
-                    name="cv_pipe_segmenter",
-                    parameters=[{
-                        "input_topic": "image_raw",
-                        "output_topic": mask_topic,
-                        "min_red": LaunchConfiguration("min_red"),
-                        "min_green": LaunchConfiguration("min_green"),
-                        "min_blue": LaunchConfiguration("min_blue"),
-                        "max_channel_diff": LaunchConfiguration("max_channel_diff"),
-                        "max_red_blue_diff": LaunchConfiguration("max_red_blue_diff"),
-                        "min_area": LaunchConfiguration("min_area"),
-                        "min_height_ratio": LaunchConfiguration("min_height_ratio"),
-                        "min_aspect": LaunchConfiguration("min_aspect"),
-                        "max_aspect": LaunchConfiguration("max_aspect"),
-                        "erode_kernel_size": LaunchConfiguration("erode_kernel_size"),
-                    }],
-                    extra_arguments=[{"use_intra_process_comms": True}],
                 ),
                 ComposableNode(
                     package="rov_pipe_tracker",
@@ -147,7 +131,8 @@ def generate_launch_description():
                     parameters=[{
                         "raw_topic": "image_raw",
                         "mask_topic": mask_topic,
-                        "processed_topic": processed_topic,
+                        "processed_topic": "",
+                        "overlay_stream_url": overlay_stream_url,
                         "processed_stream_url": processed_stream_url,
                         "command_log_topic": command_log_topic,
                         "http_host": web_host,
@@ -171,18 +156,6 @@ def generate_launch_description():
                         "arm_service": "/pipe_tracker/arm",
                         "manual_mode_service": "/pipe_tracker/manual_mode",
                         "manual_control_service": "/pipe_tracker/manual_control_enabled",
-                    }],
-                    extra_arguments=[{"use_intra_process_comms": True}],
-                ),
-                ComposableNode(
-                    package="rov_pipe_tracker",
-                    plugin="rov_pipe_tracker::ParameterTuningWebUiNode",
-                    name="parameter_tuning_web_ui",
-                    parameters=[{
-                        "http_host": tuning_web_host,
-                        "http_port": tuning_web_port,
-                        "segmenter_node": "/cv_pipe_segmenter",
-                        "tracker_node": "/pipe_tracker",
                     }],
                     extra_arguments=[{"use_intra_process_comms": True}],
                 ),
