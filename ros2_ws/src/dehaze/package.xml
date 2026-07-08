@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>dehaze</name>
+  <version>0.0.1</version>
+  <description>UDCP dehaze component.</description>
+  <maintainer email="xylin@example.com">xylin</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>rclcpp_components</depend>
+  <depend>sensor_msgs</depend>
+
+  <build_depend>opencv</build_depend>
+  <exec_depend>opencv</exec_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

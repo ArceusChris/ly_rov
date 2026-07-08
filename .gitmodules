@@ -1,0 +1,9 @@
+[submodule "ardupilot"]
+	path = ardupilot
+	url = git@github.com:ArceusChris/ardupilot.git
+[submodule "hobot_dnn"]
+	path = hobot_dnn
+	url = git@github.com:D-Robotics/hobot_dnn.git
+[submodule "mavlink"]
+	path = mavlink
+	url = git@github.com:mavlink/mavlink.git
