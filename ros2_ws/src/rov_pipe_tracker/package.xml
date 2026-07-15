@@ -10,7 +10,11 @@
 
   <depend>rclcpp</depend>
   <depend>rclcpp_components</depend>
+  <depend>sensor_msgs</depend>
   <depend>ai_msgs</depend>
+
+  <build_depend>opencv</build_depend>
+  <exec_depend>opencv</exec_depend>
 
   <exec_depend>camera_driver</exec_depend>
   <exec_depend>dehaze</exec_depend>

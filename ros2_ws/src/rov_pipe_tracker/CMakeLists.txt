@@ -10,8 +10,10 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(ament_cmake REQUIRED)
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
+find_package(OpenCV REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_components REQUIRED)
+find_package(sensor_msgs REQUIRED)
 find_package(ai_msgs REQUIRED)
 
 set(MAVLINK_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../mavlink" CACHE PATH "mavlink submodule path")
@@ -47,12 +49,22 @@ add_dependencies(pipe_tracker_component generate_mavlink_headers)
 target_include_directories(pipe_tracker_component PRIVATE ${MAVLINK_GEN_DIR})
 ament_target_dependencies(pipe_tracker_component rclcpp rclcpp_components ai_msgs)
 
+add_library(cv_pipe_segmenter_component SHARED src/cv_pipe_segmenter_node.cpp)
+target_include_directories(cv_pipe_segmenter_component PRIVATE ${OpenCV_INCLUDE_DIRS})
+target_link_libraries(cv_pipe_segmenter_component ${OpenCV_LIBS})
+ament_target_dependencies(cv_pipe_segmenter_component rclcpp rclcpp_components sensor_msgs ai_msgs)
+
 rclcpp_components_register_node(pipe_tracker_component
   PLUGIN "rov_pipe_tracker::PipeTrackerNode"
   EXECUTABLE pipe_tracker_node
 )
 
-install(TARGETS pipe_tracker_component
+rclcpp_components_register_node(cv_pipe_segmenter_component
+  PLUGIN "rov_pipe_tracker::CvPipeSegmenterNode"
+  EXECUTABLE cv_pipe_segmenter_node
+)
+
+install(TARGETS pipe_tracker_component cv_pipe_segmenter_component
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION bin
